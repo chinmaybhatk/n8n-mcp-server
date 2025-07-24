@@ -13,7 +13,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Configuration - reads from environment variables
-const N8N_URL = process.env.N8N_URL || 'https://n8n.waluelab.com';
+const N8N_URL = process.env.N8N_URL || 'https://your-n8n-instance.com';
 const N8N_API_KEY = process.env.N8N_API_KEY;
 
 if (!N8N_API_KEY) {
