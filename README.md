@@ -42,6 +42,17 @@ Model Context Protocol (MCP) server for managing n8n workflows. This allows Clau
    npm run build
    ```
 
+## Getting n8n API Key
+
+1. In your n8n instance, go to **Settings** > **API**
+2. Create a new API key with the following permissions:
+   - `workflow:create`
+   - `workflow:read`
+   - `workflow:update`
+   - `workflow:delete`
+   - `workflow:execute`
+   - `execution:read`
+
 ## Usage
 
 ### With Claude Desktop
@@ -81,6 +92,53 @@ npm run dev
 - `execute_workflow` - Manually execute a workflow
 - `get_executions` - Get workflow execution history
 
+## Troubleshooting
+
+### Common Issues
+
+**400 Bad Request when creating workflows:**
+- Ensure all required node fields are present: `id`, `name`, `type`, `typeVersion`, `position`, `parameters`
+- Verify the workflow structure matches n8n's expected format
+- Check that node connections reference valid node names
+
+**Authentication Errors:**
+- Verify your N8N_API_KEY is correct and has proper permissions
+- Ensure your N8N_URL is accessible and includes the protocol (https://)
+- Check that the API key hasn't expired
+
+**Network Timeouts:**
+- The server includes a 30-second timeout for API requests
+- For large workflows, consider breaking them into smaller parts
+
+**405 Method Not Allowed:**
+- Some n8n versions use different endpoints for activation/execution
+- The server includes fallback endpoints for compatibility
+
+### Debug Mode
+
+The updated server includes detailed logging. Check the console output for:
+- API request/response details
+- Error messages with status codes
+- Workflow validation errors
+
+### Testing API Connection
+
+You can test your n8n API connection manually:
+
+```bash
+curl -H "X-N8N-API-KEY: your_api_key" https://your-n8n-instance.com/api/v1/workflows
+```
+
+## Recent Updates (v1.0.1)
+
+- ✅ Fixed workflow creation payload structure
+- ✅ Added comprehensive error handling and logging
+- ✅ Improved node validation before creation
+- ✅ Added fallback endpoints for different n8n versions
+- ✅ Better error messages for troubleshooting
+- ✅ Preserved existing workflow data during updates
+- ✅ Increased API timeout to 30 seconds
+
 ## Example Usage
 
 Once configured, you can interact with Claude like this:
@@ -98,6 +156,15 @@ Once configured, you can interact with Claude like this:
 - Never commit your `.env` file
 - Store API keys securely
 - Use environment variables for sensitive configuration
+- Ensure your n8n instance is properly secured
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
 ## License
 
