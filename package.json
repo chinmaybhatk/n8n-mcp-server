@@ -1,6 +1,6 @@
 {
   "name": "n8n-mcp-server",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "MCP server for n8n workflow management with improved error handling and API fixes",
   "main": "build/index.js",
   "type": "module",
