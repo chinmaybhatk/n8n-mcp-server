@@ -8,6 +8,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import axios, { AxiosError } from 'axios';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 
 // Load environment variables
 dotenv.config();
@@ -35,6 +36,9 @@ const n8nApi = axios.create({
 n8nApi.interceptors.request.use(
   (config) => {
     console.error(`[API Request] ${config.method?.toUpperCase()} ${config.url}`);
+    if (process.env.DEBUG === 'true' && config.data) {
+      console.error('[Request Data]', JSON.stringify(config.data, null, 2));
+    }
     return config;
   },
   (error) => {
@@ -64,7 +68,7 @@ class N8NMCPServer {
     this.server = new Server(
       {
         name: 'n8n-workflow-server',
-        version: '1.0.1',
+        version: '1.0.2',
       },
       {
         capabilities: {
@@ -317,6 +321,10 @@ class N8NMCPServer {
     return error instanceof Error ? error.message : String(error);
   }
 
+  private generateNodeId(): string {
+    return crypto.randomBytes(16).toString('hex');
+  }
+
   private async listWorkflows(args: any) {
     const params = args.active !== undefined ? { active: args.active } : {};
     const response = await n8nApi.get('/workflows', { params });
@@ -351,9 +359,17 @@ class N8NMCPServer {
       nodes: args.nodes || [],
       connections: args.connections || {},
       active: args.active || false,
-      settings: args.settings || { executionOrder: 'v1' },
-      staticData: null,
-      meta: null,
+      settings: args.settings || { 
+        executionOrder: 'v1',
+        saveDataSuccessExecution: 'all',
+        saveExecutionProgress: true,
+        saveManualExecutions: true,
+        callerPolicy: 'workflowsFromSameOwner'
+      },
+      staticData: {},
+      meta: {
+        instanceId: crypto.randomBytes(16).toString('hex')
+      },
       pinData: {},
       tags: []
     };
@@ -368,27 +384,55 @@ class N8NMCPServer {
       throw new Error('Nodes must be an array');
     }
 
-    // Ensure each node has required fields
-    workflowData.nodes.forEach((node: any, index: number) => {
+    // Process each node to ensure proper structure
+    workflowData.nodes = workflowData.nodes.map((node: any, index: number) => {
+      // Generate ID if not provided
       if (!node.id) {
-        throw new Error(`Node at index ${index} is missing required 'id' field`);
+        node.id = this.generateNodeId();
       }
+      
+      // Validate required fields
       if (!node.name) {
         throw new Error(`Node at index ${index} is missing required 'name' field`);
       }
       if (!node.type) {
         throw new Error(`Node at index ${index} is missing required 'type' field`);
       }
+      
+      // Set default typeVersion if not provided
       if (!node.typeVersion) {
-        throw new Error(`Node at index ${index} is missing required 'typeVersion' field`);
+        node.typeVersion = 1;
       }
+      
+      // Set default position if not provided
       if (!node.position || !Array.isArray(node.position) || node.position.length !== 2) {
-        throw new Error(`Node at index ${index} is missing valid 'position' field (must be [x, y] array)`);
+        node.position = [250 + (index * 250), 300];
       }
+      
+      // Ensure parameters object exists
       if (!node.parameters) {
         node.parameters = {};
       }
+      
+      // Add default properties
+      node.disabled = node.disabled || false;
+      node.notesInFlow = node.notesInFlow || false;
+      
+      return node;
     });
+
+    // Process connections to ensure they reference nodes by name
+    const processedConnections: any = {};
+    
+    if (workflowData.connections && typeof workflowData.connections === 'object') {
+      for (const [nodeName, nodeConnections] of Object.entries(workflowData.connections)) {
+        if (typeof nodeConnections === 'object' && nodeConnections !== null) {
+          processedConnections[nodeName] = nodeConnections;
+        }
+      }
+    }
+    
+    workflowData.connections = processedConnections;
 
     console.error('[Creating Workflow]', JSON.stringify(workflowData, null, 2));
 
@@ -411,14 +455,50 @@ class N8NMCPServer {
     const existingResponse = await n8nApi.get(`/workflows/${id}`);
     const existingWorkflow = existingResponse.data;
     
+    // Process nodes if provided
+    if (updateData.nodes && Array.isArray(updateData.nodes)) {
+      updateData.nodes = updateData.nodes.map((node: any, index: number) => {
+        // Generate ID if not provided
+        if (!node.id) {
+          node.id = this.generateNodeId();
+        }
+        
+        // Set defaults
+        if (!node.typeVersion) {
+          node.typeVersion = 1;
+        }
+        
+        if (!node.position || !Array.isArray(node.position)) {
+          node.position = [250 + (index * 250), 300];
+        }
+        
+        if (!node.parameters) {
+          node.parameters = {};
+        }
+        
+        node.disabled = node.disabled || false;
+        node.notesInFlow = node.notesInFlow || false;
+        
+        return node;
+      });
+    }
+    
     // Merge with existing data
     const workflowData = {
       ...existingWorkflow,
       ...updateData,
       // Ensure these fields are preserved/set correctly
-      settings: updateData.settings || existingWorkflow.settings || { executionOrder: 'v1' },
-      staticData: existingWorkflow.staticData || null,
-      meta: existingWorkflow.meta || null,
+      settings: updateData.settings || existingWorkflow.settings || { 
+        executionOrder: 'v1',
+        saveDataSuccessExecution: 'all',
+        saveExecutionProgress: true,
+        saveManualExecutions: true,
+        callerPolicy: 'workflowsFromSameOwner'
+      },
+      staticData: existingWorkflow.staticData || {},
+      meta: existingWorkflow.meta || {
+        instanceId: crypto.randomBytes(16).toString('hex')
+      },
       pinData: existingWorkflow.pinData || {},
       tags: updateData.tags || existingWorkflow.tags || []
     };
@@ -449,8 +529,7 @@ class N8NMCPServer {
   }
 
   private async activateWorkflow(args: any) {
-    // n8n uses PATCH for activation, but the endpoint might be different
-    // Try the activation endpoint first
+    // n8n uses PATCH for activation
     try {
       const response = await n8nApi.patch(`/workflows/${args.id}`, {
         active: args.active,
@@ -465,11 +544,12 @@ class N8NMCPServer {
         ],
       };
     } catch (error) {
-      // If that fails, try the alternative endpoint
+      // If that fails with 405, try the alternative endpoint
       if (error instanceof AxiosError && error.response?.status === 405) {
-        const response = await n8nApi.patch(`/workflows/${args.id}/activate`, {
-          active: args.active,
-        });
+        // Try alternative activation method
+        const workflow = await n8nApi.get(`/workflows/${args.id}`);
+        workflow.data.active = args.active;
+        const response = await n8nApi.put(`/workflows/${args.id}`, workflow.data);
         
         return {
           content: [
@@ -504,7 +584,7 @@ class N8NMCPServer {
       };
     } catch (error) {
       // If that fails, try alternative endpoint
-      if (error instanceof AxiosError && error.response?.status === 404) {
+      if (error instanceof AxiosError && (error.response?.status === 404 || error.response?.status === 405)) {
         const response = await n8nApi.post(`/workflows/run`, {
           workflowId: args.id,
           ...executionData,
@@ -517,7 +597,7 @@ class N8NMCPServer {
               text: `Workflow execution started!\n${JSON.stringify(response.data, null, 2)}`,
             },
           ],
-        };
+        ];
       }
       throw error;
     }
@@ -547,7 +627,7 @@ class N8NMCPServer {
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('N8N MCP server running on stdio');
+    console.error('N8N MCP server running on stdio (v1.0.2)');
   }
 }
 
