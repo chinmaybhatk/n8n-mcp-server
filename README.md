@@ -97,9 +97,10 @@ npm run dev
 ### Common Issues
 
 **400 Bad Request when creating workflows:**
-- Ensure all required node fields are present: `id`, `name`, `type`, `typeVersion`, `position`, `parameters`
-- Verify the workflow structure matches n8n's expected format
-- Check that node connections reference valid node names
+- The server now automatically generates node IDs if not provided
+- Default positions are set for nodes without positions
+- Default typeVersion is set to 1 if not specified
+- Ensure node names and types are provided
 
 **Authentication Errors:**
 - Verify your N8N_API_KEY is correct and has proper permissions
@@ -111,15 +112,17 @@ npm run dev
 - For large workflows, consider breaking them into smaller parts
 
 **405 Method Not Allowed:**
-- Some n8n versions use different endpoints for activation/execution
-- The server includes fallback endpoints for compatibility
+- The server includes fallback methods for activation and execution
+- For activation, it will try updating the entire workflow if PATCH fails
 
 ### Debug Mode
 
-The updated server includes detailed logging. Check the console output for:
-- API request/response details
-- Error messages with status codes
-- Workflow validation errors
+Enable debug mode by setting `DEBUG=true` in your `.env` file:
+```
+DEBUG=true
+```
+
+This will log request/response data for troubleshooting.
 
 ### Testing API Connection
 
@@ -128,6 +131,16 @@ You can test your n8n API connection manually:
 ```bash
 curl -H "X-N8N-API-KEY: your_api_key" https://your-n8n-instance.com/api/v1/workflows
 ```
+
+## Recent Updates (v1.0.2)
+
+- ✅ Auto-generate node IDs when not provided
+- ✅ Set intelligent default positions for nodes
+- ✅ Auto-set typeVersion to 1 if not specified
+- ✅ Enhanced workflow settings with proper defaults
+- ✅ Improved activation endpoint with fallback method
+- ✅ Added debug mode for request/response logging
+- ✅ Better error messages with full response data
 
 ## Recent Updates (v1.0.1)
 
@@ -150,6 +163,8 @@ Once configured, you can interact with Claude like this:
 2. Create the appropriate nodes (Webhook, Code, Slack)
 3. Configure the connections
 4. Use the MCP server to create it in your n8n instance
+
+**Note:** You don't need to specify node IDs or positions - the server handles these automatically!
 
 ## Security
 
